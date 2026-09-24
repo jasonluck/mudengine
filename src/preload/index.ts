@@ -90,6 +90,8 @@ const api: IpcApi = {
     ipcRenderer.invoke(Invoke.setRemoteGrant, session, name, grant),
   setGangRemotes: (session, remotes) => ipcRenderer.invoke(Invoke.setGangRemotes, session, remotes),
   setRemoteGangpath: (session, on) => ipcRenderer.invoke(Invoke.setRemoteGangpath, session, on),
+  setRemotePartyRelay: (session, on) =>
+    ipcRenderer.invoke(Invoke.setRemotePartyRelay, session, on),
   setAutomationSwitch: (session, name, on) =>
     ipcRenderer.invoke(Invoke.setAutomationSwitch, session, name, on),
   setSupplies: (session, items) => ipcRenderer.invoke(Invoke.setSupplies, session, items),

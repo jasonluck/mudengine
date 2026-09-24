@@ -5050,6 +5050,14 @@ export class SessionManager {
     // Likewise a prompt that stopped fitting what `pro` said the line was.
     if (this.tracker.takeStatlineRequest()) this.routines.askProfile();
     /*
+     * The exact command a just-applied room block confirmed as a move,
+     * unfiltered — a direction, a text exit, a teleport, or null. Passed
+     * straight through to `Remotes`, which is the one place that decides
+     * whether a confirmed command is worth relaying to the party.
+     */
+    const confirmedMove = this.tracker.takeConfirmedMove();
+    if (confirmedMove !== null) this.remotes.relayMove(confirmedMove, this.tracker.current);
+    /*
      * A pack listing is the fact a requested deposit is waiting on: it is what
      * restates the purse, and the figure the deposit names is composed from it
      * *here* rather than beside the `i` that asked for it. After `apply`, which

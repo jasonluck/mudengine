@@ -731,6 +731,8 @@ interface CharacterForm {
   rewrites: RewritesUiConfig;
   /** Whether the gang's own channel is one of the channels it answers on. */
   remoteGangpath: boolean;
+  /** Whether a confirmed text-exit crossing is relayed to the party while leading it. */
+  remotePartyRelay: boolean;
   /** What anybody in this character's gang may ask for. */
   remoteGang: RemoteName[];
   /** Remotes anybody who has joined this character's party may ask for. */
@@ -876,6 +878,7 @@ function formOf(entry: ProfileEditable): CharacterForm {
     afkReply: entry.afk.reply,
     answerRemotes: entry.remotes.enabled,
     remoteGangpath: entry.remotes.gangpath,
+    remotePartyRelay: entry.remotes.partyRelay,
     remoteGang: [...entry.remotes.gang],
     remoteParty: [...entry.remotes.party],
     remotePlayers: entry.remotes.players,
@@ -1116,6 +1119,7 @@ function draftOf(form: CharacterForm): ProfileDraft {
     remotes: {
       enabled: form.answerRemotes,
       gangpath: form.remoteGangpath,
+      partyRelay: form.remotePartyRelay,
       gang: form.remoteGang,
       party: form.remoteParty,
       players: form.remotePlayers
@@ -1412,6 +1416,7 @@ function emptyForm(
     afkReply: afk.reply,
     answerRemotes: remotes.enabled,
     remoteGangpath: remotes.gangpath,
+    remotePartyRelay: remotes.partyRelay,
     remoteGang: [...remotes.gang],
     remoteParty: [...remotes.party],
     remotePlayers: remotes.players,
@@ -3819,6 +3824,13 @@ export default function SettingsScreen({
                             label={t('settings.remotes.gangpathLabel')}
                             name="remotes-gangpath"
                             onChange={(value) => patch({ remoteGangpath: value })}
+                          />
+                          <CheckField
+                            checked={form.remotePartyRelay}
+                            hint={t('settings.remotes.partyRelayHint')}
+                            label={t('settings.remotes.partyRelayLabel')}
+                            name="remotes-party-relay"
+                            onChange={(value) => patch({ remotePartyRelay: value })}
                           />
                           {/*
                             Nothing on the wire establishes who shares a gang

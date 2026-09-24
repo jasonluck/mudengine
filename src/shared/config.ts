@@ -1061,6 +1061,18 @@ export interface RemotesConfig {
    */
   gangpath: boolean;
   /**
+   * Echo a confirmed `Text:` exit crossing to the party as `@party <command>`
+   * while leading it, and run a reinvite sweep behind it. See
+   * `Remotes.relayMove`.
+   *
+   * Its own switch, off by default and distinct from `enabled` above, for the
+   * same reason `gangpath` is: turning on remote-command *answering* must not
+   * silently turn on this outbound behaviour too — one is somebody else's
+   * typing moving this character, and the other is this character's own
+   * movement speaking on the party's behalf.
+   */
+  partyRelay: boolean;
+  /**
    * Remotes anybody in **this character's gang** may use.
    *
    * One list, not a map keyed by gang: a character is in one gang at a time.
@@ -2790,6 +2802,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     remotes: {
       enabled: false,
       gangpath: false,
+      partyRelay: false,
       gang: [],
       /*
        * The one grant that ships non-empty, and it is three names: see
@@ -3870,6 +3883,7 @@ function normalizeRemotes(value: unknown, d: RemotesConfig): RemotesConfig {
   return {
     enabled: bool(raw['enabled'], d.enabled),
     gangpath: bool(raw['gangpath'], d.gangpath),
+    partyRelay: bool(raw['partyRelay'], d.partyRelay),
     gang: remoteNames(raw['gang'], d.gang),
     party: remoteNames(raw['party'], d.party),
     players: playerGrants(raw['players'], d.players)

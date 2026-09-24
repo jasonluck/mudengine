@@ -646,6 +646,8 @@ export interface StatlineDraft {
 export interface RemotesDraft {
   enabled: boolean;
   gangpath: boolean;
+  /** Whether a confirmed text-exit crossing is relayed to the party while leading it. */
+  partyRelay: boolean;
   /** What anybody in this character's gang may ask for. Validated against `REMOTE_NAMES`. */
   gang: RemoteName[];
   /** What anybody who has joined this character's party may ask for. */
@@ -1134,6 +1136,7 @@ export function asProfileDraft(value: unknown): ProfileDraft | null {
     remotes: {
       enabled: remotes['enabled'] === true,
       gangpath: remotes['gangpath'] === true,
+      partyRelay: remotes['partyRelay'] === true,
       gang: remoteNames(remotes['gang']),
       party: remoteNames(remotes['party']),
       players: playerGrants(remotes['players'])
@@ -1298,6 +1301,7 @@ export function asGlobalDraft(value: unknown): GlobalDraft | null {
       remotes: {
         enabled: remotes['enabled'] === true,
         gangpath: remotes['gangpath'] === true,
+        partyRelay: remotes['partyRelay'] === true,
         gang: remoteNames(remotes['gang']),
         party: remoteNames(remotes['party']),
         players: playerGrants(remotes['players'])

@@ -51,6 +51,7 @@ import type { LoopProgress } from '../../shared/loops';
 import type { WalkProgress } from '../../shared/walk';
 import type { Block } from '../../shared/blocks';
 import { gangOnRoster, joinedTheParty, ownGang, type CharacterState } from '../../shared/character';
+import { movementEffect } from '../../shared/commands';
 import type { AutomationConfig, RemotesConfig } from '../../shared/config';
 import {
   EXTENDED_REMOTES,
@@ -290,6 +291,25 @@ export class Remotes {
   private wantsHeal = false;
   /** Whether the character is known to be seen, so a say costs no stealth. */
   private seen = false;
+
+  /**
+   * Reinvite-sweep checks armed by `relayMove`, each due at `at`. See
+   * `sweepPartyRelay`.
+   */
+  private relayChecks: Array<{ at: number; expected: string[] }> = [];
+  /**
+   * Party members currently known missing since a reinvite sweep, by
+   * `playerKey`, with the spelling to re-invite them by.
+   *
+   * Kept across checks, not only within one: a member who has genuinely left
+   * the roster is gone from `party.members` for good, so a *later* relay's own
+   * snapshot (`relayMove`'s `expected`) never names them again — the retry
+   * this module owes them has nowhere else to read their name from. Tracked
+   * so a drop is reported to the player once and not on every later retry, and
+   * so a member who reappears and later drops again is reported fresh. See
+   * `sweepPartyRelay`.
+   */
+  private readonly missingPartyMembers = new Map<string, string>();
 
   constructor(
     private config: AutomationConfig,
@@ -532,6 +552,108 @@ export class Remotes {
   }
 
   /**
+   * A confirmed `Text:` exit crossing, echoed to the party.
+   *
+   * Wired from `SessionManager` the moment `CharacterTracker` confirms a
+   * move, unfiltered — a direction, a text exit and a teleport all reach
+   * here, and this is the one place that decides which of those is worth
+   * relaying at all. Off unless `partyRelay` is on; a no-op for a direction
+   * or `sys goto` (`movementEffect` reads `'unknown'` for a text exit alone,
+   * never for those); a no-op for anybody who is not leading — following
+   * somebody, or alone (`party.members` no bigger than the character's own
+   * row) — since a typo can never reach this call at all: `movementEffect`
+   * reading `'unknown'` for a command that got this far already means the
+   * room confirmed it, which a typo's room block never does.
+   *
+   * Sent MegaMUD's own way: `.@party <command>` said once while the
+   * character is known to be seen, so every follower standing in the room
+   * hears the one line; telepathed individually to each other member
+   * otherwise, so relaying does not unhide a hidden or sneaking leader. No
+   * coalescing — each crossing is its own decision, the same reading `@do`
+   * and `@party` already answer on the receiving side — and `user` priority,
+   * matching `ask`/`send`'s own convention.
+   *
+   * Arms a reinvite-sweep check against the roster as it stood the moment
+   * before this crossing. See `sweepPartyRelay`.
+   */
+  relayMove(command: string, state: CharacterState): void {
+    if (!this.config.enabled || !this.config.remotes.partyRelay) return;
+    if (movementEffect(command) !== 'unknown') return;
+    if (state.party.following !== null || state.party.members.length <= 1) return;
+
+    /*
+     * `party.members.length > 1` alone is the raw `Leader/Leading` test
+     * (`CONTEXT.md`), but a member row can be an offer nobody has accepted
+     * yet (`invited`) — `partyMembers` excludes those, exactly as
+     * `askForHeal` excludes them from who it asks. A leader with nobody who
+     * has actually joined has nobody to relay to: saying `.@party <command>`
+     * aloud would be to an empty room, and telepathing loops over nothing.
+     */
+    const expected = partyMembers(state);
+    if (expected.length === 0) return;
+    const reason = t('automation.remotes.reasonRelay', { command });
+    if (state.stealth === 'seen') {
+      this.queue.enqueue({ command: `.@party ${command}`, priority: 'user', reason });
+    } else {
+      for (const member of expected) {
+        this.queue.enqueue({ command: `/${member} @party ${command}`, priority: 'user', reason });
+      }
+    }
+    this.relayChecks.push({ at: Date.now() + tuning().remotes.replyMs, expected });
+  }
+
+  /**
+   * Checks a relay's roster snapshot against the roster now, once the settle
+   * delay armed in `relayMove` has passed.
+   *
+   * The same `Outstanding`/`sweep()` shape this module already uses for its
+   * other "ask, then check back later" flow, run from `onCharacter` for the
+   * identical reason: there is no timer of its own, and a module that owns
+   * one owns cancelling it.
+   *
+   * A name expected but missing gets one notice — only the first time it is
+   * found missing, tracked by `missingPartyMembers` — and an `invite` every
+   * time, silently on every later check while it stays missing. A name that
+   * reappears is dropped from the missing set, so a later, separate drop of
+   * the same person is reported fresh.
+   */
+  private sweepPartyRelay(state: CharacterState, now: number): void {
+    if (this.relayChecks.length === 0) return;
+    const due = this.relayChecks.filter((check) => check.at <= now);
+    if (due.length === 0) return;
+    this.relayChecks = this.relayChecks.filter((check) => check.at > now);
+
+    /*
+     * Everybody this check owes an answer to: the roster this crossing
+     * expected, and anybody a previous crossing already found missing — a
+     * name that has actually left `party.members` never reappears in a later
+     * snapshot to renew the retry from, so the retry has to carry itself.
+     */
+    const owed = new Map<string, string>(this.missingPartyMembers);
+    for (const check of due) {
+      for (const name of check.expected) owed.set(playerKey(name), name);
+    }
+
+    const present = new Set(partyMembers(state).map((name) => playerKey(name)));
+    for (const [key, name] of owed) {
+      if (present.has(key)) {
+        this.missingPartyMembers.delete(key);
+        continue;
+      }
+      if (!this.missingPartyMembers.has(key)) {
+        this.missingPartyMembers.set(key, name);
+        this.events.notice?.(t('automation.remotes.partyMemberMissing', { who: name }));
+      }
+      this.queue.enqueue({
+        command: `invite ${name}`,
+        priority: 'user',
+        coalesceKey: `remote:invite:${key}`,
+        reason: t('automation.remotes.reasonReinvite', { who: name })
+      });
+    }
+  }
+
+  /**
    * Tells the party leader this character has stopped, and when it is ready.
    *
    * `@wait` and `@ok` are the pacing pair: a follower that has to sit down asks
@@ -546,6 +668,7 @@ export class Remotes {
    */
   onCharacter(state: CharacterState): void {
     if (this.config.enabled && this.config.remotes.enabled) this.sweep(Date.now());
+    if (this.config.enabled) this.sweepPartyRelay(state, Date.now());
     this.askForHeal(state);
     const resting = state.vitals.resting || state.vitals.meditating;
     const was = this.resting;
@@ -709,6 +832,8 @@ export class Remotes {
     this.askedForHealAt = null;
     this.wantsHeal = false;
     this.seen = false;
+    this.relayChecks = [];
+    this.missingPartyMembers.clear();
   }
 
   /**

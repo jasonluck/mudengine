@@ -559,6 +559,23 @@ export class SettingsEditor {
   }
 
   /**
+   * Whether this character echoes a confirmed text-exit crossing to its party
+   * while leading it, and runs the reinvite sweep behind it.
+   *
+   * The Gang card's own write, exactly as `setRemoteGangpath` is: the card is
+   * where the party roster this feature acts on is shown.
+   */
+  setRemotePartyRelay(id: string, on: boolean): EditResult {
+    const file = this.profilePath(id);
+    if (!fs.existsSync(file)) {
+      return { ok: false, error: t('errors.settings.characterNotFound', { id }) };
+    }
+    return editYaml(file, {
+      mutate: (document) => document.setIn(['automation', 'remotes', 'partyRelay'], on)
+    });
+  }
+
+  /**
    * This character's whole supplies list — `automation.supplies.items`.
    *
    * The Self card's and the item panel's write, and the gang list's shape for

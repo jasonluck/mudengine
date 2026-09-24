@@ -590,12 +590,13 @@ describe('what a character plays against, and what keeps it alive', () => {
   it('writes a character’s own answer to `@` commands', () => {
     editor.saveProfile(
       'vaelor',
-      draft({ remotes: { enabled: true, gangpath: false, gang: [], party: [], players: {} } })
+      draft({ remotes: { enabled: true, gangpath: false, partyRelay: false, gang: [], party: [], players: {} } })
     );
     const automation = read('vaelor')['automation'] as Record<string, unknown>;
     expect(automation['remotes']).toEqual({
       enabled: true,
       gangpath: false,
+      partyRelay: false,
       gang: [],
       party: [],
       players: {}
@@ -653,6 +654,7 @@ describe('what a character plays against, and what keeps it alive', () => {
     expect(automation['remotes']).toEqual({
       enabled: false,
       gangpath: false,
+      partyRelay: false,
       gang: [],
       // Copied from Global, which is where the shipped party list lives. The
       // switch is off, so it grants nobody anything until somebody turns
@@ -671,16 +673,17 @@ describe('what a character plays against, and what keeps it alive', () => {
   it('keeps the key when it is turned back off', () => {
     editor.saveProfile(
       'vaelor',
-      draft({ remotes: { enabled: true, gangpath: false, gang: [], party: [], players: {} } })
+      draft({ remotes: { enabled: true, gangpath: false, partyRelay: false, gang: [], party: [], players: {} } })
     );
     editor.saveProfile(
       'vaelor',
-      draft({ remotes: { enabled: false, gangpath: false, gang: [], party: [], players: {} } })
+      draft({ remotes: { enabled: false, gangpath: false, partyRelay: false, gang: [], party: [], players: {} } })
     );
     const automation = read('vaelor')['automation'] as Record<string, unknown>;
     expect(automation['remotes']).toEqual({
       enabled: false,
       gangpath: false,
+      partyRelay: false,
       gang: [],
       party: [],
       players: {}
@@ -1274,7 +1277,7 @@ describe('one player’s @ command permissions', () => {
   beforeEach(() => {
     editor.saveProfile(
       'vaelor',
-      draft({ remotes: { enabled: true, gangpath: false, gang: [], party: [], players: {} } })
+      draft({ remotes: { enabled: true, gangpath: false, partyRelay: false, gang: [], party: [], players: {} } })
     );
   });
 
@@ -1404,7 +1407,7 @@ describe('the gang list and the gangpath switch', () => {
   beforeEach(() => {
     editor.saveProfile(
       'vaelor',
-      draft({ remotes: { enabled: true, gangpath: false, gang: [], party: [], players: {} } })
+      draft({ remotes: { enabled: true, gangpath: false, partyRelay: false, gang: [], party: [], players: {} } })
     );
   });
 
@@ -1431,9 +1434,17 @@ describe('the gang list and the gangpath switch', () => {
     expect(remotesOf('vaelor')['gangpath']).toBe(false);
   });
 
+  it('turns the party relay on and off', () => {
+    expect(editor.setRemotePartyRelay('vaelor', true).ok).toBe(true);
+    expect(remotesOf('vaelor')['partyRelay']).toBe(true);
+    editor.setRemotePartyRelay('vaelor', false);
+    expect(remotesOf('vaelor')['partyRelay']).toBe(false);
+  });
+
   it('refuses a character that does not exist', () => {
     expect(editor.setGangRemotes('nobody-at-all', ['health']).ok).toBe(false);
     expect(editor.setRemoteGangpath('nobody-at-all', true).ok).toBe(false);
+    expect(editor.setRemotePartyRelay('nobody-at-all', true).ok).toBe(false);
   });
 
   it('leaves the per-player grants alone', () => {

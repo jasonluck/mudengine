@@ -570,6 +570,7 @@ interface CardContext {
   /** The gang's whole list, and whether the gangpath is answered on. */
   setGangRemotes(remotes: RemoteName[]): void;
   setGangpath(on: boolean): void;
+  setPartyRelay(on: boolean): void;
   /**
    * This character's supplies list and the write, for the Self card and the
    * item panel — resolved per character like `remotes`, and addressed.
@@ -628,6 +629,7 @@ interface AddressedActions {
   selectPlayer(name: string, anchor: PopoverAnchor): void;
   setGangRemotes(remotes: RemoteName[]): void;
   setGangpath(on: boolean): void;
+  setPartyRelay(on: boolean): void;
   setSupplies(items: SupplyItem[]): void;
   send(line: string): void;
   macro(line: string): void;
@@ -825,6 +827,7 @@ function cardElement(id: CardId, ctx: CardContext): ReactNode {
           onSelect={ctx.selectPlayer}
           onSetGangRemotes={ctx.setGangRemotes}
           onSetGangpath={ctx.setGangpath}
+          onSetPartyRelay={ctx.setPartyRelay}
           remotes={ctx.remotes}
           session={ctx.session}
           subject={ctx.subject}
@@ -5004,6 +5007,7 @@ export default function App() {
         selectPlayer: (name, anchor) => selectPlayerRef.current(sid, name, anchor),
         setGangRemotes: (remotes) => void api.setGangRemotes(sid, remotes),
         setGangpath: (on) => void api.setRemoteGangpath(sid, on),
+        setPartyRelay: (on) => void api.setRemotePartyRelay(sid, on),
         setSupplies: (items) =>
           void api.setSupplies(sid, items).then((refused) => sayRefusalRef.current(sid)(refused)),
         send: (line) => void api.input(sid, `${line}\r`),
@@ -5137,6 +5141,7 @@ export default function App() {
         remotes: remotesFor(sid),
         setGangRemotes: bound.setGangRemotes,
         setGangpath: bound.setGangpath,
+        setPartyRelay: bound.setPartyRelay,
         supplies: suppliesBundle(sid),
         profileName: profileNameFor(sid),
         /*

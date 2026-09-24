@@ -1072,6 +1072,13 @@ automation:
   # (this character's own `bg` comes back naming itself, and an admin can ghost
   # one), so it is deliberately not evidence.
   #
+  # `partyRelay` is unrelated to answering: while leading a party, it echoes a
+  # confirmed `Text:` exit crossing (never a cardinal direction or `sys goto`)
+  # to the party as `@party <command>`, MegaMUD's own convention, and reinvites
+  # anyone the roster shows missing right after. Off by default and its own
+  # switch, distinct from `enabled` above -- turning on answering must not
+  # silently turn on this character's own outbound movement chatter too.
+  #
   # `party` is what anybody who has **joined this character's party** may ask
   # for, and it is the one list that ships with anything in it. The first two
   # names say nothing the party listing does not already say and do nothing to
@@ -1122,6 +1129,7 @@ automation:
   remotes:
     enabled: false
     gangpath: false
+    partyRelay: false
     gang: []
     party: [health, bless-expired, heal]
     players: {}

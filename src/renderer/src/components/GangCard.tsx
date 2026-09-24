@@ -29,6 +29,8 @@ export interface GangCardProps extends CardChrome {
   onSetGangRemotes(remotes: RemoteName[]): void;
   /** Whether the gangpath is answered on at all. */
   onSetGangpath(on: boolean): void;
+  /** Whether a confirmed text-exit crossing is relayed to the party. */
+  onSetPartyRelay(on: boolean): void;
   /** A member's name clicked: the Player flyout on them, beside the row. */
   onSelect?(name: string, anchor: PopoverAnchor): void;
   /** Whoever the flyout is about, as `playerKey` files them, so the row is marked. */
@@ -116,6 +118,7 @@ function GangCard({
   remotes,
   onSetGangRemotes,
   onSetGangpath,
+  onSetPartyRelay,
   onSelect,
   subject,
   ask,
@@ -303,6 +306,16 @@ function GangCard({
         <span>{t('cards.gang.gangpathLabel')}</span>
       </label>
       <p className="settings-note">{t('cards.gang.gangpathHint')}</p>
+
+      <label className="gang-party-relay">
+        <input
+          checked={remotes.partyRelay}
+          onChange={(event) => onSetPartyRelay(event.target.checked)}
+          type="checkbox"
+        />
+        <span>{t('cards.gang.partyRelayLabel')}</span>
+      </label>
+      <p className="settings-note">{t('cards.gang.partyRelayHint')}</p>
 
       {!remotes.enabled ? <p className="settings-warn">{t('cards.gang.offWarning')}</p> : null}
       {gang === undefined ? (

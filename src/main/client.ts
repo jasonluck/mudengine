@@ -2902,6 +2902,14 @@ function registerIpc(): void {
     return result.ok ? null : result.error;
   });
 
+  /* Whether a confirmed text-exit crossing is relayed to the party. Same push. */
+  handle(Invoke.setRemotePartyRelay, (_caller, session: unknown, on: unknown) => {
+    if (typeof session !== 'string') return t('app.profiles.noSuchCharacter');
+    const result = editor().setRemotePartyRelay(session, on === true);
+    if (result.ok) publishRosters();
+    return result.ok ? null : result.error;
+  });
+
   /*
    * This character's supplies list, from the Self card or the item panel.
    * Same shape and same push: the list rides on `ProfileSummary`, and a card

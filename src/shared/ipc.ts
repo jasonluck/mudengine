@@ -818,6 +818,8 @@ export const Invoke = {
   setGangRemotes: 'settings:gang-remotes',
   /** Whether this character answers `@` commands on the gangpath at all. */
   setRemoteGangpath: 'settings:remote-gangpath',
+  /** Whether this character relays a confirmed text-exit crossing to its party. */
+  setRemotePartyRelay: 'settings:remote-party-relay',
   /**
    * One automation switch, flipped from the toolbar.
    *
@@ -1269,6 +1271,8 @@ export interface IpcApi {
   setGangRemotes(session: SessionId, remotes: RemoteName[]): Promise<string | null>;
   /** Turns gangpath answering on or off for one character. */
   setRemoteGangpath(session: SessionId, on: boolean): Promise<string | null>;
+  /** Turns party relay (echo + reinvite sweep) on or off for one character. */
+  setRemotePartyRelay(session: SessionId, on: boolean): Promise<string | null>;
   /**
    * Flips one `automation:` boolean in a character's own file.
    *

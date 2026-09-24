@@ -10,6 +10,7 @@ import type { Block } from '../../../shared/blocks';
 import { NO_LOOP, type LoopProgress } from '../../../shared/loops';
 import type { WalkProgress } from '../../../shared/walk';
 import { ACTIONABLE_REMOTES } from '../../../shared/remotes';
+import { tuning } from '../../app/tuning';
 
 /**
  * Every name these tests speak as.
@@ -50,6 +51,7 @@ const config: AutomationConfig = {
   remotes: {
     enabled: true,
     gangpath: true,
+    partyRelay: false,
     gang: [],
     // Empty, so nothing here is granted by a party listing arriving: these
     // cases are about the answer, and the gate has its own block below.
@@ -778,6 +780,7 @@ describe('the gate: who may ask, and for what', () => {
     remotes: {
       enabled: true,
       gangpath: true,
+      partyRelay: false,
       gang: gang as never,
       party: [],
       players: Object.fromEntries(
@@ -1023,7 +1026,7 @@ describe('the gangpath is answered on only when it is switched on', () => {
    */
   const inGang = (gangpath: boolean): AutomationConfig => ({
     ...config,
-    remotes: { enabled: true, gangpath, gang: ['health'], party: [], players: {} }
+    remotes: { enabled: true, gangpath, partyRelay: false, gang: ['health'], party: [], players: {} }
   });
 
   const together = (): CharacterState =>
@@ -1071,7 +1074,14 @@ describe('the gangpath is answered on only when it is switched on', () => {
   it('does not act on one with it off either', () => {
     peers.configure({
       ...inGang(false),
-      remotes: { enabled: true, gangpath: false, gang: ['do'], party: [], players: {} }
+      remotes: {
+        enabled: true,
+        gangpath: false,
+        partyRelay: false,
+        gang: ['do'],
+        party: [],
+        players: {}
+      }
     });
     peers.onBlock(said('conversation-gangpath', 'Spike', '@do who'), together());
     drain();
@@ -1088,7 +1098,7 @@ describe('a channel this client never answers on, from somebody with no grant', 
    */
   const ungranted = (): AutomationConfig => ({
     ...config,
-    remotes: { enabled: true, gangpath: true, gang: [], party: [], players: {} }
+    remotes: { enabled: true, gangpath: true, partyRelay: false, gang: [], party: [], players: {} }
   });
 
   const live = (): CharacterState =>
@@ -1484,5 +1494,189 @@ describe('@heal', () => {
     queue.noteTyping(false);
     drain();
     expect(sent).toEqual(['.@heal']);
+  });
+});
+
+/*
+ * Party relay: `Remotes.relayMove` is wired from `SessionManager` the moment
+ * `CharacterTracker` confirms a move, unfiltered — see its own tests in
+ * `CharacterTracker.test.ts`. Everything here is about what `Remotes` itself
+ * decides once handed one.
+ */
+describe('party relay: a confirmed text exit echoed to the party', () => {
+  const partyMember = (name: string, invited = false) => ({
+    name,
+    className: null,
+    health: 1,
+    mana: null,
+    rank: null,
+    activity: null,
+    invited,
+    vitals: null
+  });
+
+  /** Leading a party of this character plus `others`, known to be `stealth`. */
+  const leading = (stealth: CharacterState['stealth'], ...others: string[]): CharacterState =>
+    who({
+      stealth,
+      party: {
+        ...EMPTY_CHARACTER.party,
+        following: null,
+        members: [partyMember('Vaelor'), ...others.map((name) => partyMember(name))]
+      }
+    });
+
+  const relaying = (over: Partial<AutomationConfig> = {}): AutomationConfig => ({
+    ...config,
+    ...over,
+    remotes: { ...config.remotes, partyRelay: true, ...over.remotes }
+  });
+
+  it('says the confirmed command once, in the room, while known to be seen', () => {
+    peers.configure(relaying());
+    peers.relayMove('go manhole', leading('seen', 'Soul', 'Yang'));
+    drain();
+    expect(sent).toEqual(['.@party go manhole']);
+  });
+
+  /* Telepathed instead, the same reason `askForHeal`'s dual path is. */
+  it('telepaths each other member instead, unless known to be seen', () => {
+    peers.configure(relaying());
+    for (const stealth of ['sneaking', 'unknown'] as const) {
+      sent.length = 0;
+      peers.relayMove('go manhole', leading(stealth, 'Soul', 'Yang'));
+      drain();
+      expect(sent).toEqual(['/Soul @party go manhole', '/Yang @party go manhole']);
+    }
+  });
+
+  it('is a no-op for a cardinal direction or a sys goto, however it is leading', () => {
+    peers.configure(relaying());
+    peers.relayMove('n', leading('seen', 'Soul'));
+    peers.relayMove('sys goto 1 5', leading('seen', 'Soul'));
+    drain();
+    expect(sent).toEqual([]);
+  });
+
+  it('is a no-op for a follower, for a solo character, and with the setting off', () => {
+    peers.configure(relaying());
+    // Following somebody: not leading.
+    peers.relayMove(
+      'go manhole',
+      who({
+        stealth: 'seen',
+        party: {
+          ...EMPTY_CHARACTER.party,
+          following: 'Soul',
+          members: [partyMember('Vaelor'), partyMember('Soul')]
+        }
+      })
+    );
+    // Alone: nobody else on the roster.
+    peers.relayMove('go manhole', leading('seen'));
+    // "Leading" a member who has only been invited, never joined: the raw
+    // roster is bigger than one, but nobody has actually joined to relay to.
+    peers.relayMove(
+      'go manhole',
+      who({
+        stealth: 'seen',
+        party: {
+          ...EMPTY_CHARACTER.party,
+          following: null,
+          members: [partyMember('Vaelor'), partyMember('Soul', true)]
+        }
+      })
+    );
+    drain();
+    expect(sent).toEqual([]);
+
+    // The positive control: the identical command, leading a real party.
+    peers.relayMove('go manhole', leading('seen', 'Soul'));
+    drain();
+    expect(sent).toEqual(['.@party go manhole']);
+    sent.length = 0;
+
+    // And with `partyRelay` off, its own switch, distinct from `enabled`.
+    peers.configure(config);
+    peers.relayMove('go manhole', leading('seen', 'Soul'));
+    drain();
+    expect(sent).toEqual([]);
+  });
+
+  describe('the reinvite sweep armed behind it', () => {
+    it('notices a member missing once, and re-invites on every later check while they stay missing', () => {
+      peers.configure(relaying());
+      peers.relayMove('go manhole', leading('seen', 'Soul', 'Yang'));
+      drain();
+      sent.length = 0;
+
+      // Soul has fallen off the roster by the time the sweep checks; Yang is
+      // still there.
+      const dropped = leading('seen', 'Yang');
+      vi.advanceTimersByTime(tuning().remotes.replyMs);
+      peers.onCharacter(dropped);
+      drain();
+      expect(sent).toEqual(['invite Soul']);
+      expect(notices.join(' ')).toContain('Soul');
+      sent.length = 0;
+      notices.length = 0;
+
+      // A second relay arms a second check; Soul is still missing on it.
+      peers.relayMove('go manhole', dropped);
+      drain();
+      sent.length = 0;
+      vi.advanceTimersByTime(tuning().remotes.replyMs);
+      peers.onCharacter(dropped);
+      drain();
+      // Invited again, silently — no second notice for the same drop.
+      expect(sent).toEqual(['invite Soul']);
+      expect(notices).toEqual([]);
+    });
+
+    it('reports a fresh notice for a member who reappears and later drops again', () => {
+      peers.configure(relaying());
+      peers.relayMove('go manhole', leading('seen', 'Soul'));
+      drain();
+      sent.length = 0;
+
+      vi.advanceTimersByTime(tuning().remotes.replyMs);
+      peers.onCharacter(leading('seen')); // Soul missing.
+      drain();
+      expect(notices.join(' ')).toContain('Soul');
+      notices.length = 0;
+      sent.length = 0;
+
+      // Soul rejoins, and a later relay's own sweep sees the roster whole
+      // again — clearing the missing mark.
+      peers.relayMove('go manhole', leading('seen', 'Soul'));
+      drain();
+      sent.length = 0;
+      vi.advanceTimersByTime(tuning().remotes.replyMs);
+      peers.onCharacter(leading('seen', 'Soul'));
+      drain();
+      expect(notices).toEqual([]);
+      expect(sent).toEqual([]);
+
+      // A separate, later drop of the same person.
+      peers.relayMove('go manhole', leading('seen', 'Soul'));
+      drain();
+      sent.length = 0;
+      vi.advanceTimersByTime(tuning().remotes.replyMs);
+      peers.onCharacter(leading('seen')); // Missing again — a fresh drop.
+      drain();
+      expect(notices.join(' ')).toContain('Soul');
+    });
+
+    it('does not notice anything before the settle delay has passed', () => {
+      peers.configure(relaying());
+      peers.relayMove('go manhole', leading('seen', 'Soul'));
+      drain();
+      sent.length = 0;
+
+      peers.onCharacter(leading('seen')); // Soul missing, but too soon to check.
+      drain();
+      expect(sent).toEqual([]);
+      expect(notices).toEqual([]);
+    });
   });
 });
