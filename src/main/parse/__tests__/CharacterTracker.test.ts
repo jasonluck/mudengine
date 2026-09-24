@@ -6864,6 +6864,7 @@ describe('a text exit the player types', () => {
     );
     expect(t.pendingMoves).toBe(0);
   });
+
 });
 
 describe('a move the walker hinted', () => {

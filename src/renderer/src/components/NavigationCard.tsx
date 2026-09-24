@@ -641,6 +641,15 @@ function walkChip(walk: WalkProgress) {
   if (walk.status === 'walking' && walk.hold === 'dark') {
     return <span className="chip info">{t('cards.navigation.route.badgeDark')}</span>;
   }
+  /*
+   * A text exit was just relayed to the party; standing still for everyone to
+   * be seen in the new room. `info` with the search and the dark room, for
+   * the identical reason: the client is doing something about it, and it is
+   * bounded (`tuning().remotes.partyArriveMs`).
+   */
+  if (walk.status === 'walking' && walk.hold === 'party') {
+    return <span className="chip info">{t('cards.navigation.route.badgeParty')}</span>;
+  }
   if (walk.status === 'walking') {
     /*
      * The whole journey, and drawn as one (todo 03): `done` and `total` are

@@ -3564,6 +3564,29 @@ describe('a room being read again', () => {
   });
 });
 
+/*
+ * A text exit just relayed to the party: the walk stands still until
+ * `partyHold` says everyone has caught up (party relay).
+ */
+describe('waiting for the party to catch up', () => {
+  it('holds the step until partyHold says the party has arrived', async () => {
+    let caughtUp = true;
+    const walk = new Walker(config, queue, {
+      stateNow: () => at(1, 1),
+      partyHold: () => caughtUp
+    });
+    walk.start(ROUTE, at(1, 1));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(sent).toEqual([]);
+    expect(walk.progress.hold).toBe('party');
+    caughtUp = false;
+    await vi.advanceTimersByTimeAsync(1_600);
+    expect(sent).toEqual(['e']);
+    expect(walk.progress.hold).toBeNull();
+    walk.dispose();
+  });
+});
+
 describe('walking while hurt', () => {
   /** A character at a stated fraction of full health, standing in 1/1. */
   const hurt = (fraction: number): CharacterState => {

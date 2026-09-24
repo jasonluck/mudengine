@@ -1057,6 +1057,7 @@ tabs:
     markSearching: searching
     markBlocked: blocked
     markLighting: lighting
+    markWaitingForParty: waiting for party
     markBlind: blind
     markHeld: held
     markPoisoned: poisoned
@@ -1887,6 +1888,8 @@ cards:
     tableCaption: The members of this character's gang
     gangpathHint: When disabled, incoming gangpath (@) commands are ignored.
     gangpathLabel: Allow Remotes on Gangpath
+    partyRelayHint: While leading a party, say a text-exit crossing walked by the Walker or a loop aloud as "@party <command>" before moving, wait briefly for everyone to catch up, and re-invite anyone the roster then shows missing. Not yet for one typed by hand.
+    partyRelayLabel: Relay Text Exits to Party
     legend: Anybody in {gang}
     legendUnknown: Anybody in this character's gang
     noMembers: nobody else from {gang} is on the roster
@@ -2098,6 +2101,7 @@ cards:
       badgeSearching: searching
       badgeBlocked: blocked
       badgeDark: lighting
+      badgeParty: waiting for party
       badgeStopped: stopped
       endedReason: 'Ended: {reason}'
       gatedLabel: Gated
@@ -3869,6 +3873,12 @@ settings:
     gangpathHint: 'A gangpath answer is spoken to the whole gang — “gb @exp” is answered “gb
       {Made…}” where every member sees both halves.'
     gangpathLabel: Allow Remotes on Gangpath
+    partyRelayHint: 'Not about answering: while leading a party, a text-exit crossing walked by the
+      Walker or a loop is said aloud to it as "@party <command>" before moving, MegaMUD''s own
+      convention, then this character waits briefly for everyone to arrive; anyone the roster then
+      shows missing is re-invited. Not yet for a text exit typed by hand. Cardinal directions and
+      sys goto are left alone.'
+    partyRelayLabel: Relay Text Exits to Party
     legend: Answering Other Players
     playerLegend: Permissions for {name}
     partyListNote:
@@ -5131,6 +5141,7 @@ automation:
       one ({yes: 1}), so nothing was sent.'
     ranDo: 'Remote execution (@do) by {from}: "{command}"'
     ranParty: '{from} asked the party to "{command}".'
+    partyMemberMissing: '{who} is missing from the party after a text-exit relay; re-inviting.'
     peerIsOurs:
       "{who} answered @version with {client}, so questions to them will use this client's own
       wording — a room's realm address rather than its name."
@@ -5157,6 +5168,8 @@ automation:
     reasonInvite: '@invite from {from}'
     reasonJoin: '@join from {from}'
     reasonParty: '@party from {from}'
+    reasonRelay: 'party relay: "{command}"'
+    reasonReinvite: 're-inviting {who} after a party relay'
     refusal:
       hangup: an unclean disconnect costs a percentage of maximum health and is fatal at low health;
         walking out is the escape that works

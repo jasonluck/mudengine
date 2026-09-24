@@ -296,6 +296,14 @@ function attention(
     return { level: 'info', label: t('tabs.tab.markLighting') };
   }
   /*
+   * A text exit just relayed to the party; standing still for everyone to be
+   * seen in the new room. `info` for the dark room's reason — the client is
+   * doing something about it, and it is bounded (`tuning().remotes.partyArriveMs`).
+   */
+  if (view.walk.status === 'walking' && view.walk.hold === 'party') {
+    return { level: 'info', label: t('tabs.tab.markWaitingForParty') };
+  }
+  /*
    * Waiting out a stated affliction, on a route or between a lap's legs.
    * `warn`, unlike the holds above: a condition is something the person may
    * want to come and cure, and `walking` or `looping` here would be the tab

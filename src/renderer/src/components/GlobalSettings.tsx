@@ -2283,6 +2283,15 @@ export default function GlobalSettings({
                     automation({ remotes: { ...draft.automation.remotes, gangpath: value } })
                   }
                 />
+                <CheckField
+                  checked={draft.automation.remotes.partyRelay}
+                  hint={t('settings.remotes.partyRelayHint')}
+                  label={t('settings.remotes.partyRelayLabel')}
+                  name="global-remotes-party-relay"
+                  onChange={(value) =>
+                    automation({ remotes: { ...draft.automation.remotes, partyRelay: value } })
+                  }
+                />
                 <p className="settings-warn">{t('settings.remotes.gangWarning')}</p>
                 <h4 className="settings-subhead">{t('settings.remotes.gangLegend')}</h4>
                 {/*

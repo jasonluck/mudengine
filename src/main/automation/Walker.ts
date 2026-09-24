@@ -231,6 +231,15 @@ export interface WalkerEvents {
    */
   holdAt?(state: CharacterState): boolean;
   /**
+   * Whether a text-exit crossing this walk just relayed to the party is still
+   * being caught up on — some relayed-to member has not yet been seen in the
+   * room the character now stands in, and the catch-up window is still open
+   * (`Remotes.partyCatchingUp`). Bounded by that window itself rather than by
+   * `maxHolds`, and re-asked on the same short beat every other named hold
+   * here uses; see `holdForParty`.
+   */
+  partyHold?(state: CharacterState): boolean;
+  /**
    * Whether the spells a `spell-onset` names hold the character in place, off
    * the realm's own rows — `true`, `false`, or `null` where the realm cannot
    * say: no candidate named, a name it lacks, a row with no ability data. Only
@@ -3603,6 +3612,8 @@ export class Walker {
     if (this.holdForAffliction(state)) return true;
     // Then the trap the step ahead fires, on the same terms again.
     if (this.holdForTrap(state)) return true;
+    // Then the party the last text exit relayed to, catching up — see `holdForParty`.
+    if (this.holdForParty(state)) return true;
     /*
      * A fight running here is not "no quarry", and it is outside the budget
      * too. `holdAt` asks whether engagement *would open* on something in this
@@ -4651,6 +4662,37 @@ export class Walker {
           })
         );
       }
+      this.publish();
+    }
+    this.holdTimer = setTimeout(() => {
+      this.holdTimer = null;
+      if (this.status !== 'walking') return;
+      if (this.holdBeforeSending(this.events.stateNow?.() ?? state)) return;
+      this.sendCurrent();
+    }, tuning().walk.holdMs);
+    this.holdTimer.unref?.();
+    return true;
+  }
+
+  /**
+   * A beat while the party this walk just relayed a text-exit crossing to is
+   * still catching up — some relayed-to member has not yet been seen in the
+   * room the character now stands in. Bounded by `Remotes.partyCatchingUp`'s
+   * own catch-up window, not by `maxHolds`: a party that never catches up is
+   * the reinvite sweep's problem to notice, on its own, much longer
+   * timescale — this hold's job is only to give the common case (everybody
+   * about to walk in a moment behind) a beat, not to camp on the exit.
+   */
+  private holdForParty(state: CharacterState): boolean {
+    if (this.events.partyHold?.(state) !== true) {
+      if (this.hold === 'party') {
+        this.hold = null;
+        this.publish();
+      }
+      return false;
+    }
+    if (this.hold === null) {
+      this.hold = 'party';
       this.publish();
     }
     this.holdTimer = setTimeout(() => {

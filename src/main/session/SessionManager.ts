@@ -1618,6 +1618,18 @@ export class SessionManager {
         this.questRunner.onWalkEnded(arrived, reason, this.tracker.current);
       },
       stepping: (command, direction, to, landing) => {
+        /*
+         * Said to the party **before** the step's own `queue.enqueue` three
+         * lines below this callback's own call site in `Walker.sendCurrent`
+         * — this fires outside any `CommandQueue` drain, so `relayMove`'s
+         * own enqueue drains and sends at once rather than being deferred.
+         * Unconditional: `relayMove` already filters by shape
+         * (`movementEffect(command) === 'unknown'`), so a cardinal direction
+         * or a scripted `sys goto`-style teleport is a no-op call here, and a
+         * text exit — plain, or the first half of a cast exit's pair — is
+         * not.
+         */
+        this.remotes.relayMove(command, this.tracker.current);
         if (landing !== undefined && direction !== 'portal') {
           /*
            * An exit whose cast moves the character, which answers with **two**
@@ -1729,6 +1741,7 @@ export class SessionManager {
       // whole: which walks engage is `whileWalking` and `looping`, and stating
       // half of that here left the two able to disagree. See `quarry`.
       holdAt: (state) => this.combat.quarry(state),
+      partyHold: (state) => this.remotes.partyCatchingUp(state),
       // Whether an onset that landed behind a step is a hold at all is the
       // realm's to say, and the realm is here. See `spellsHold`.
       spellsHold: (spells) => this.spellsHold(spells),
@@ -3635,6 +3648,24 @@ export class SessionManager {
          * not, and neither is decidable from the word.
          */
         if (this.tracker.observeCommand(command)) {
+          /*
+           * A hand-typed text exit is deliberately **not** relayed from here
+           * (2026-09-25, under discussion). `Walker`'s own `stepping` event
+           * can say the relay before its step because Walker enqueues that
+           * step itself, as one atomic write; a keystroke-typed command is
+           * not — each character reaches this client's `xterm` terminal and
+           * is echoed to the socket as its own write the moment it arrives
+           * (`term.onData`, `TerminalView.tsx`), well before the terminating
+           * `\r` this block is handling. By the time a full command is
+           * recognised here, its own text is already sitting unterminated in
+           * the server's own read buffer — inserting a separately-terminated
+           * relay line ahead of it does not precede the move; it *corrupts*
+           * it, merging the relay's trailing newline with the move's own
+           * un-terminated prefix into one nonsense command, with the move's
+           * real terminator then arriving as a stray bare Enter. Confirmed
+           * live in this exact shape by `SessionManager.test.ts`'s "says the
+           * party relay" case, typed key by key rather than as one chunk.
+           */
           this.playerMove = { where: this.whereWeStand(), at: Date.now() };
         }
         this.login.observeCommand(command);

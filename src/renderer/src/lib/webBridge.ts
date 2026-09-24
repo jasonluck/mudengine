@@ -189,6 +189,7 @@ export function createWebBridge(): IpcApi {
     setRemoteGrant: (session, name, grant) => invoke(Invoke.setRemoteGrant, session, name, grant),
     setGangRemotes: (session, remotes) => invoke(Invoke.setGangRemotes, session, remotes),
     setRemoteGangpath: (session, on) => invoke(Invoke.setRemoteGangpath, session, on),
+    setRemotePartyRelay: (session, on) => invoke(Invoke.setRemotePartyRelay, session, on),
     setAutomationSwitch: (session, name, on) =>
       invoke(Invoke.setAutomationSwitch, session, name, on),
     setSupplies: (session, items) => invoke(Invoke.setSupplies, session, items),

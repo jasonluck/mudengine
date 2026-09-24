@@ -1121,6 +1121,14 @@ tuning:
     # MegaMUD re-reads the party listing every 15s in a fight (ParPeriod).
     healAskAgainMs: 15000
 
+    # How long the leader's own walk or loop stands still after a party
+    # relay, waiting for everyone it was sent to to be seen in the new room,
+    # before giving up and carrying on anyway. Short on purpose: this is only
+    # for the common case of a party a step behind, not a wait to depend on.
+    # Anyone who never makes it at all is the reinvite sweep's problem
+    # (replyMs, above), on its own longer timescale.
+    partyArriveMs: 15000
+
   # How many commands one press or one `@` may spend.
   #
   # One budget, because it is one budget: each `wear`, `get` or `drop` comes
