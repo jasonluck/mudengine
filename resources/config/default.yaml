@@ -1072,12 +1072,14 @@ automation:
   # (this character's own `bg` comes back naming itself, and an admin can ghost
   # one), so it is deliberately not evidence.
   #
-  # `partyRelay` is unrelated to answering: while leading a party, it echoes a
-  # confirmed `Text:` exit crossing (never a cardinal direction or `sys goto`)
-  # to the party as `@party <command>`, MegaMUD's own convention, and reinvites
-  # anyone the roster shows missing right after. Off by default and its own
-  # switch, distinct from `enabled` above -- turning on answering must not
-  # silently turn on this character's own outbound movement chatter too.
+  # `partyRelay` is unrelated to answering: while leading a party, it says a
+  # `Text:` exit crossing walked by the Walker or a loop (never a cardinal
+  # direction or `sys goto`, and not yet one typed by hand) aloud to the
+  # party as `@party <command>` before moving, MegaMUD's own convention,
+  # then waits briefly for everyone to arrive and reinvites anyone the
+  # roster shows missing right after. Off by default and its own switch,
+  # distinct from `enabled` above -- turning on answering must not silently
+  # turn on this character's own outbound movement chatter too.
   #
   # `party` is what anybody who has **joined this character's party** may ask
   # for, and it is the one list that ships with anything in it. The first two

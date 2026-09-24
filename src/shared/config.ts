@@ -1061,9 +1061,12 @@ export interface RemotesConfig {
    */
   gangpath: boolean;
   /**
-   * Echo a confirmed `Text:` exit crossing to the party as `@party <command>`
-   * while leading it, and run a reinvite sweep behind it. See
-   * `Remotes.relayMove`.
+   * Say a `Text:` exit crossing aloud to the party as `@party <command>`
+   * before moving, while leading it; wait briefly for everyone to catch up;
+   * and run a reinvite sweep behind it for anyone who does not. Currently
+   * only for a crossing the Walker or a loop walks, not one typed by hand —
+   * see `Remotes.relayMove`'s own doc for why. See also
+   * `Remotes.partyCatchingUp`.
    *
    * Its own switch, off by default and distinct from `enabled` above, for the
    * same reason `gangpath` is: turning on remote-command *answering* must not

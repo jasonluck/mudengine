@@ -879,6 +879,60 @@ describe('a person at the keyboard', () => {
   });
 
   /*
+   * The party relay's own attempt at the bug above, and where it stops
+   * (party relay, 2026-09-25). A queued relay sat blocked by the very typing
+   * hold that is still open at the moment a just-committed command reaches
+   * `observeCommand` — so it drained only once `noteTyping(false)` released
+   * it, a few lines after that command's own bytes had already gone out.
+   * Writing the relay straight to the socket instead does not fix it either:
+   * each keystroke is *already* on the wire, unterminated, by the time a full
+   * command is recognised here (typed one at a time, exactly as `dance` was
+   * above), so a separately-terminated relay line inserted now does not
+   * precede the move — it corrupts it, merging into one nonsense command
+   * with the move's real terminator left as a stray bare Enter. So this path
+   * does not attempt the relay at all; see `Remotes.relayMove`'s own doc.
+   */
+  it('does not relay a hand-typed text exit, rather than corrupt it', async () => {
+    const { sink } = collect();
+    manager = new SessionManager(sink, haven(), {
+      ...DEFAULT_CONFIG.automation,
+      enabled: true,
+      remotes: { ...DEFAULT_CONFIG.automation.remotes, enabled: true, partyRelay: true }
+    });
+    await manager.connect({ host: '127.0.0.1', port, encoding: 'cp437' });
+    const socket = await client();
+    const chunks: Buffer[] = [];
+    socket.on('data', (chunk) => chunks.push(chunk));
+
+    socket.write('[HP=100/MA=50]:' + PROMPT_REPAINT);
+    await until(() => manager!.character.phase === 'in-game');
+    socket.write('Location:            1,3\r\nRat Lair\r\nObvious exits: south, down\r\n');
+    await until(() => manager!.character.room.number === 3);
+    socket.write('Soul started to follow you.\r\n');
+    // The join broadcast alone only ever adds the one name; the roster
+    // listing is what states the character's own row alongside it.
+    socket.write(
+      'The following people are in your travel party:\r\n' +
+        '  Vaelor                        (Warrior)             [H:100%]  - Frontrank\r\n' +
+        '  Soul                          (Paladin)    [M:100%] [H:100%]  - Backrank\r\n' +
+        '[HP=100/MA=50]:'
+    );
+    await until(() => manager!.character.party.members.length > 1);
+
+    // Typed one keystroke at a time, exactly as `dance` was above — the shape
+    // that leaves the queue typing-held at the moment `observeCommand` fires.
+    for (const key of 'go manhole') manager.send(key);
+    manager.send('\r');
+    await until(() => Buffer.concat(chunks).toString('latin1').includes('go manhole\r'));
+
+    // Sent clean, as its own line — not merged with a relay this path never
+    // attempts, and nothing here says `@party` at all.
+    const bytes = Buffer.concat(chunks).toString('latin1');
+    expect(bytes).toContain('go manhole\r');
+    expect(bytes).not.toContain('@party');
+  });
+
+  /*
    * And the failure that made `editorInput` necessary, end to end.
    *
    * Escape leaves no character in the server's line, so it is not a half-typed
@@ -2718,6 +2772,52 @@ describe('which way out', () => {
   let collected: ReturnType<typeof collect>;
   beforeEach(() => {
     collected = collect();
+  });
+
+  /*
+   * The case the ordering fix is actually for (party relay, 2026-09-25): a
+   * `Text:` exit the Walker itself steps, not one typed by hand. Unlike a
+   * keystroke, the Walker enqueues its own step from outside any
+   * `CommandQueue` drain, so a relay enqueued first (`Remotes.relayMove`,
+   * wired to `Walker`'s own `stepping` event) drains and reaches the socket
+   * ahead of it — no typing hold, no corruption, because nothing here is
+   * being typed a character at a time.
+   */
+  it('says the party relay before the Walker-driven text exit it precedes', async () => {
+    const world = haven();
+    manager = new SessionManager(collect().sink, world, {
+      ...escaping(),
+      remotes: { ...DEFAULT_CONFIG.automation.remotes, enabled: true, partyRelay: true }
+    });
+    await manager.connect({ host: '127.0.0.1', port, encoding: 'cp437' });
+    const socket = await client();
+    const seen = wire(socket);
+    socket.write('Health: 100/100 [100%]\r\n');
+    socket.write('[HP=100]:' + PROMPT_REPAINT);
+    socket.write('Location:            1,3\r\nRat Lair\r\nObvious exits: south, down\r\n');
+    await until(() => manager!.character.room.number === 3);
+    socket.write('Soul started to follow you.\r\n');
+    // The join broadcast alone only ever adds the one name; the roster
+    // listing is what states the character's own row alongside it.
+    socket.write(
+      'The following people are in your travel party:\r\n' +
+        '  Vaelor                        (Warrior)             [H:100%]  - Frontrank\r\n' +
+        '  Soul                          (Paladin)    [M:100%] [H:100%]  - Backrank\r\n' +
+        '[HP=100]:'
+    );
+    await until(() => manager!.character.party.members.length > 1);
+
+    expect(manager.walker.start(world.route('1/3', '1/4'), manager.character)).toBeNull();
+    // Two occurrences: the relay's own line contains the same words as the
+    // step it precedes, so this waits past both rather than matching the
+    // relay alone and reading the step as never having arrived.
+    await until(() => (seen().match(/go manhole\r\n/g) ?? []).length >= 2);
+
+    const wireText = seen();
+    const relayAt = wireText.indexOf('.@party go manhole\r\n');
+    expect(relayAt).toBeGreaterThanOrEqual(0);
+    // The step's own bytes are still to come, after the relay.
+    expect(wireText.slice(relayAt + '.@party go manhole\r\n'.length)).toContain('go manhole');
   });
 
   /*

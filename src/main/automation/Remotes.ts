@@ -311,6 +311,19 @@ export class Remotes {
    */
   private readonly missingPartyMembers = new Map<string, string>();
 
+  /**
+   * The roster the last relay expected to catch up, and when it was armed —
+   * or null once everyone has been seen, or the catch-up window has passed.
+   * Read by `partyCatchingUp`, which `Walker`'s own `holdForParty` asks.
+   *
+   * Separate from `relayChecks`/`missingPartyMembers` above: those are about
+   * `party.members` (the roster), settled on a much longer timescale for
+   * anyone genuinely dropped; this is about `room.occupants` (who has
+   * physically walked in), settled within moments for the common case of a
+   * party that is simply a step behind.
+   */
+  private catchUp: { at: number; expected: string[] } | null = null;
+
   constructor(
     private config: AutomationConfig,
     private readonly queue: CommandQueue,
@@ -552,35 +565,40 @@ export class Remotes {
   }
 
   /**
-   * A confirmed `Text:` exit crossing, echoed to the party.
+   * A `Text:` exit crossing about to happen, echoed to the party.
    *
-   * Wired from `SessionManager` the moment `CharacterTracker` confirms a
-   * move, unfiltered — a direction, a text exit and a teleport all reach
-   * here, and this is the one place that decides which of those is worth
-   * relaying at all. Off unless `partyRelay` is on; a no-op for a direction
-   * or `sys goto` (`movementEffect` reads `'unknown'` for a text exit alone,
-   * never for those); a no-op for anybody who is not leading — following
-   * somebody, or alone (`party.members` no bigger than the character's own
-   * row) — since a typo can never reach this call at all: `movementEffect`
-   * reading `'unknown'` for a command that got this far already means the
-   * room confirmed it, which a typo's room block never does.
+   * Wired from `Walker`'s own `stepping` event, right before the step it
+   * describes reaches the queue — unfiltered: a direction, a text exit and a
+   * teleport all reach here, and this is the one place that decides which of
+   * those is worth relaying at all. Off unless `partyRelay` is on; a no-op
+   * for a direction or `sys goto` (`movementEffect` reads `'unknown'` for a
+   * text exit alone, never for those); a no-op for anybody who is not
+   * leading — following somebody, or alone (`party.members` no bigger than
+   * the character's own row). Nothing filters a typo here because nothing
+   * has to: the Walker never sends a command it has not already verified
+   * against the realm's own exit data when planning the route.
    *
-   * **Always telepathed, individually, to each other member — never said
-   * aloud.** A room-local say was the first cut of this (`.@party <command>`
-   * while known to be seen, mirroring `askForHeal`'s dual path), and it
-   * shipped broken: the relay fires only once the leader's own move is
-   * *confirmed*, which by construction means the room has already changed —
-   * so a say happens in the room the leader just arrived in, never heard by
-   * followers still standing in the one they left (found live, 2026-09-25).
-   * Reordering to say it before the move does not reliably fix that either:
-   * a hand-typed command can win that race, but an automated one (the
-   * Walker's own step) is sent from inside the command queue's own dispatch,
-   * whose re-entrancy guard defers anything enqueued from there by design —
-   * so the say would still land after the move for exactly the case
-   * (`Walker`-driven crossings) this feature most wants to cover. A telepath
-   * has no such race: it reaches a follower wherever they are standing, which
-   * is the whole point of not needing the party to be in one room together
-   * for this to work at all.
+   * **Not wired to a hand-typed crossing** (2026-09-25, under discussion).
+   * `Walker.sendCurrent` enqueues its own step from outside any
+   * `CommandQueue` drain, so a `queue.enqueue` here — even while the queue is
+   * typing-held — drains ahead of it once the hold clears, keeping the
+   * relay's priority (`user`, above `movement`) meaningful. A hand-typed
+   * command has no equivalent moment: each keystroke is echoed to the socket
+   * the instant it is typed (`xterm`'s own `onData`), so by the time a full
+   * command is recognised in `SessionManager`, its text is already sitting
+   * unterminated in the server's own read buffer — enqueueing a separately-
+   * terminated relay line then does not precede the move, it *corrupts* it,
+   * merging the relay's own terminator with the move's un-terminated prefix
+   * into one nonsense command and leaving the move's real terminator to
+   * arrive as a stray bare Enter. Confirmed live in exactly this shape,
+   * typed key by key rather than pasted as one chunk.
+   *
+   * **Said aloud, once — never telepathed.** MegaMUD does not act on an
+   * `@party` command sent by telepath at all, so a say is the only channel
+   * that reaches a real MegaMUD follower. A hidden or sneaking leader breaks
+   * stealth by relaying this way, same as any other say — this feature is
+   * opt-in and off by default, so that trade-off is the player's to accept
+   * by turning it on at all.
    *
    * No coalescing — each crossing is its own decision, the same reading
    * `@do` and `@party` already answer on the receiving side — and `user`
@@ -599,16 +617,44 @@ export class Remotes {
      * (`CONTEXT.md`), but a member row can be an offer nobody has accepted
      * yet (`invited`) — `partyMembers` excludes those, exactly as
      * `askForHeal` excludes them from who it asks. A leader with nobody who
-     * has actually joined has nobody to relay to: telepathing loops over
-     * nothing.
+     * has actually joined has nobody to relay to: saying `.@party <command>`
+     * aloud would be to an empty room.
      */
     const expected = partyMembers(state);
     if (expected.length === 0) return;
-    const reason = t('automation.remotes.reasonRelay', { command });
-    for (const member of expected) {
-      this.queue.enqueue({ command: `/${member} @party ${command}`, priority: 'user', reason });
-    }
+    this.queue.enqueue({
+      command: `.@party ${command}`,
+      priority: 'user',
+      reason: t('automation.remotes.reasonRelay', { command })
+    });
     this.relayChecks.push({ at: Date.now() + tuning().remotes.replyMs, expected });
+    this.catchUp = { at: Date.now(), expected };
+  }
+
+  /**
+   * Whether the party this character just relayed a text-exit crossing to is
+   * still catching up — read by `Walker`'s own `holdForParty`, on the same
+   * short beat every other named hold there re-asks on.
+   *
+   * `false` the moment every name `relayMove` expected has been seen in
+   * `state.room.occupants`, or once `tuning().remotes.partyArriveMs` has
+   * passed without that — the wait is deliberately short and gives up
+   * quietly rather than camping on the exit; the reinvite sweep is what
+   * keeps trying, on its own, much longer timescale, for anyone who never
+   * makes it at all.
+   */
+  partyCatchingUp(state: CharacterState): boolean {
+    if (this.catchUp === null) return false;
+    const present = new Set(state.room.occupants.map((who) => playerKey(who.name)));
+    if (this.catchUp.expected.every((name) => present.has(playerKey(name)))) {
+      this.catchUp = null;
+      return false;
+    }
+    if (Date.now() - this.catchUp.at >= tuning().remotes.partyArriveMs) {
+      this.catchUp = null;
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -843,6 +889,7 @@ export class Remotes {
     this.seen = false;
     this.relayChecks = [];
     this.missingPartyMembers.clear();
+    this.catchUp = null;
   }
 
   /**

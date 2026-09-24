@@ -559,8 +559,8 @@ export class SettingsEditor {
   }
 
   /**
-   * Whether this character echoes a confirmed text-exit crossing to its party
-   * while leading it, and runs the reinvite sweep behind it.
+   * Whether this character says a text-exit crossing aloud to its party
+   * before moving, while leading it, and runs the reinvite sweep behind it.
    *
    * The Gang card's own write, exactly as `setRemoteGangpath` is: the card is
    * where the party roster this feature acts on is shown.

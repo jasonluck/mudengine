@@ -1497,7 +1497,18 @@ const TUNING_DEFAULTS = {
      * how often it re-reads the listing in a fight; a healer that could not
      * answer the first request hears the second about as often.
      */
-    healAskAgainMs: 15_000
+    healAskAgainMs: 15_000,
+    /**
+     * How long the leader's own walk or loop stands still after a party
+     * relay, waiting for everyone it was sent to to be seen in the new room,
+     * before giving up and carrying on anyway.
+     *
+     * Short on purpose: this is only for the common case of a party a step
+     * behind, not a wait to depend on. Anyone who never makes it at all is
+     * the reinvite sweep's problem (`replyMs`, above), on its own longer
+     * timescale.
+     */
+    partyArriveMs: 15_000
   },
   /**
    * How many commands one press or one `@` may spend.

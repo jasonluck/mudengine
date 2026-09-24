@@ -619,17 +619,6 @@ export class CharacterTracker {
    */
   private sheetWanted = false;
   /**
-   * The exact text of a command a room block has just confirmed moved the
-   * character — a direction, a text exit, a teleport — or null when the
-   * block just applied answered no move at all, or a move nobody typed
-   * (a party follow, a drag). Set here, taken by `takeConfirmedMove`, and
-   * read by `SessionManager` for `Remotes.relayMove`: this class only
-   * reports that a movement was confirmed and what was typed for it, never
-   * whether it is worth relaying — filtering by shape is `Remotes`' job, so
-   * a cardinal direction reports here exactly as a text exit does.
-   */
-  private confirmedMove: string | null = null;
-  /**
    * The realm rows of monsters seen to die since this was last taken.
    *
    * Set here and taken by `SessionManager.noteQuestKilled`, the tracker's usual
@@ -1418,7 +1407,6 @@ export class CharacterTracker {
     this.statlineMatcher = null;
     this.statlineWanted = false;
     this.statlineAsked = false;
-    this.confirmedMove = null;
   }
 
   /**
@@ -1464,9 +1452,6 @@ export class CharacterTracker {
     this.sheetWanted = false;
     // A kill nobody read before the socket closed can no longer be acted on.
     this.deaths.clear();
-    // A move confirmed just before the socket closed has nobody left to relay
-    // it to for the rest of this session.
-    this.confirmedMove = null;
     if (this.state.phase === 'unknown' && this.state.room.name === null) return settled;
     this.state = {
       ...this.state,
@@ -2799,16 +2784,6 @@ export class CharacterTracker {
     const wanted = this.sheetWanted;
     this.sheetWanted = false;
     return wanted;
-  }
-
-  /**
-   * The exact command a room block has just confirmed as a move, or null.
-   * Cleared by the taking, as the flag above is.
-   */
-  takeConfirmedMove(): string | null {
-    const command = this.confirmedMove;
-    this.confirmedMove = null;
-    return command;
   }
 
   /**
@@ -4659,17 +4634,6 @@ export class CharacterTracker {
         // The claim this block answers, kept: a cast exit's second block
         // carries the landing it has to be resolved inside (`hintCast`).
         const answered = expectation !== null ? this.expect.shift() : null;
-        /*
-         * The exact text of a command this room block just confirmed moved
-         * the character, for `Remotes.relayMove` — a direction, a text exit
-         * or a teleport alike; a move nobody typed (`command` null) reports
-         * nothing, since there is no text to relay. Filtering by shape
-         * (direction vs. text exit) is deliberately not done here: that is
-         * `Remotes`' decision, made against the confirmed command it is
-         * handed unfiltered.
-         */
-        this.confirmedMove =
-          answered?.kind === 'move' && answered.command !== null ? answered.command : null;
         /*
          * Whatever was last said that this client does not model as movement,
          * taken here and cleared here: this room is the answer to it, and the
