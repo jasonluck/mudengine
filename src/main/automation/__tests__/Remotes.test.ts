@@ -1532,17 +1532,17 @@ describe('party relay: a confirmed text exit echoed to the party', () => {
     remotes: { ...config.remotes, partyRelay: true, ...over.remotes }
   });
 
-  it('says the confirmed command once, in the room, while known to be seen', () => {
+  /*
+   * Always telepathed, individually, never said aloud — see `relayMove`'s own
+   * doc for why: a say only reaches the room the leader currently stands in,
+   * and the relay fires once the move is confirmed, by which point the leader
+   * has already left the room the followers are still in. A telepath has no
+   * such dependency on which room anybody is standing in, so stealth changes
+   * nothing about how this is sent.
+   */
+  it('telepaths each other member individually, whatever the leader’s stealth', () => {
     peers.configure(relaying());
-    peers.relayMove('go manhole', leading('seen', 'Soul', 'Yang'));
-    drain();
-    expect(sent).toEqual(['.@party go manhole']);
-  });
-
-  /* Telepathed instead, the same reason `askForHeal`'s dual path is. */
-  it('telepaths each other member instead, unless known to be seen', () => {
-    peers.configure(relaying());
-    for (const stealth of ['sneaking', 'unknown'] as const) {
+    for (const stealth of ['seen', 'sneaking', 'unknown'] as const) {
       sent.length = 0;
       peers.relayMove('go manhole', leading(stealth, 'Soul', 'Yang'));
       drain();
@@ -1593,7 +1593,7 @@ describe('party relay: a confirmed text exit echoed to the party', () => {
     // The positive control: the identical command, leading a real party.
     peers.relayMove('go manhole', leading('seen', 'Soul'));
     drain();
-    expect(sent).toEqual(['.@party go manhole']);
+    expect(sent).toEqual(['/Soul @party go manhole']);
     sent.length = 0;
 
     // And with `partyRelay` off, its own switch, distinct from `enabled`.

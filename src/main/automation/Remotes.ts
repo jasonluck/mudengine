@@ -565,13 +565,26 @@ export class Remotes {
    * reading `'unknown'` for a command that got this far already means the
    * room confirmed it, which a typo's room block never does.
    *
-   * Sent MegaMUD's own way: `.@party <command>` said once while the
-   * character is known to be seen, so every follower standing in the room
-   * hears the one line; telepathed individually to each other member
-   * otherwise, so relaying does not unhide a hidden or sneaking leader. No
-   * coalescing — each crossing is its own decision, the same reading `@do`
-   * and `@party` already answer on the receiving side — and `user` priority,
-   * matching `ask`/`send`'s own convention.
+   * **Always telepathed, individually, to each other member — never said
+   * aloud.** A room-local say was the first cut of this (`.@party <command>`
+   * while known to be seen, mirroring `askForHeal`'s dual path), and it
+   * shipped broken: the relay fires only once the leader's own move is
+   * *confirmed*, which by construction means the room has already changed —
+   * so a say happens in the room the leader just arrived in, never heard by
+   * followers still standing in the one they left (found live, 2026-09-25).
+   * Reordering to say it before the move does not reliably fix that either:
+   * a hand-typed command can win that race, but an automated one (the
+   * Walker's own step) is sent from inside the command queue's own dispatch,
+   * whose re-entrancy guard defers anything enqueued from there by design —
+   * so the say would still land after the move for exactly the case
+   * (`Walker`-driven crossings) this feature most wants to cover. A telepath
+   * has no such race: it reaches a follower wherever they are standing, which
+   * is the whole point of not needing the party to be in one room together
+   * for this to work at all.
+   *
+   * No coalescing — each crossing is its own decision, the same reading
+   * `@do` and `@party` already answer on the receiving side — and `user`
+   * priority, matching `ask`/`send`'s own convention.
    *
    * Arms a reinvite-sweep check against the roster as it stood the moment
    * before this crossing. See `sweepPartyRelay`.
@@ -586,18 +599,14 @@ export class Remotes {
      * (`CONTEXT.md`), but a member row can be an offer nobody has accepted
      * yet (`invited`) — `partyMembers` excludes those, exactly as
      * `askForHeal` excludes them from who it asks. A leader with nobody who
-     * has actually joined has nobody to relay to: saying `.@party <command>`
-     * aloud would be to an empty room, and telepathing loops over nothing.
+     * has actually joined has nobody to relay to: telepathing loops over
+     * nothing.
      */
     const expected = partyMembers(state);
     if (expected.length === 0) return;
     const reason = t('automation.remotes.reasonRelay', { command });
-    if (state.stealth === 'seen') {
-      this.queue.enqueue({ command: `.@party ${command}`, priority: 'user', reason });
-    } else {
-      for (const member of expected) {
-        this.queue.enqueue({ command: `/${member} @party ${command}`, priority: 'user', reason });
-      }
+    for (const member of expected) {
+      this.queue.enqueue({ command: `/${member} @party ${command}`, priority: 'user', reason });
     }
     this.relayChecks.push({ at: Date.now() + tuning().remotes.replyMs, expected });
   }
